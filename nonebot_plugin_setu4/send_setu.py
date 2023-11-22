@@ -7,15 +7,15 @@ from typing import Tuple
 
 import nonebot
 from loguru import logger
-from nonebot.adapters.onebot.v11 import (
+from nonebot.adapters import (
     Bot,
-    GroupMessageEvent,
+    Event,
     Message,
-    MessageEvent,
     MessageSegment,
 )
 from nonebot.matcher import Matcher
 from nonebot.params import RegexGroup
+from nonebot_plugin_saa import MessageFactory,Image
 
 from .get_data import get_data
 from .permission_manager import pm
@@ -41,16 +41,18 @@ class SendSetu:
         # ⣿⣦⡀⣿⣿⣷⣶⣬⣍⣛⣛⣛⡛⠿⠿⠿⠛⠛⢛⣛⣉⣭⣤⣂⢜⠕⢑⣡⣴⣿
 
     @staticmethod
-    def session_id(event: MessageEvent) -> str:
+    def session_id(event: Event) -> str:
         """根据会话类型生成session_id, 一般返回str而不是None, 一般消息事件不是私聊就是群聊"""
-        if isinstance(event, GroupMessageEvent):
-            return f"group_{str(event.group_id)}"
+        
+        if "_" in event.get_session_id():
+            sesion = event.get_session_id().split("_")
+            return f"group_{sesion[0]}"
         else:
-            return f"user_{str(event.user_id)}"
+            return f"user_{event.get_session_id()}"
 
     @staticmethod
     async def setu_handle(
-        bot: Bot, matcher: Matcher, event: MessageEvent, args: Tuple = RegexGroup()
+        bot: Bot, matcher: Matcher, event: Event, args: Tuple = RegexGroup()
     ) -> None:  # sourcery skip: low-code-quality
         """发送色图的处理函数"""
         # 获取用户输入的参数
@@ -59,8 +61,8 @@ class SendSetu:
         num = int(sub(r"[张|个|份|x|✖️|×|X|*]", "", args[1])) if args[1] else 1
 
         # 根据会话类型生成session_id
-        if isinstance(event, GroupMessageEvent):
-            session_id = f"group_{str(event.group_id)}"
+        if isinstance(event, Event):
+            session_id = f"group_{str(event.get_session_id())}".format
             user_type = "group"
         else:
             session_id = f"user_{str(event.user_id)}"
@@ -70,7 +72,7 @@ class SendSetu:
         try:
             user_type = (
                 "SU"
-                if (str(event.user_id) in nonebot.get_driver().config.superusers)
+                if (str(event.get_user_id()) in nonebot.get_driver().config.superusers)
                 else user_type
             )
             r18, num, withdraw_time = pm.check_permission(
@@ -113,17 +115,17 @@ class SendSetu:
         for pic in data:
             # 如果状态为True,说明图片拿到了
             if pic[2]:
-                message = (
-                    f"{random.choice(setu_sendmessage)}{flag_log}"
-                    + Message(pic[1])
-                    + MessageSegment.image(pic[0])
-                )  # type: ignore
-                message_list.append(message)
+                message_list = [
+                    f"{random.choice(setu_sendmessage)}{flag_log}",
+                    pic[1],
+                    Image(pic[0]),
+                ]  # type: ignore
+                # message_list.append(message)
                 flag_log = ""
             # 状态为false的消息,图片没拿到
             else:
-                message = pic[0] + pic[1]
-                message_list.append(message)
+                message_list = [pic[0],Image(pic[1])]
+                # message_list.append(message)
 
         # 为后面撤回消息做准备
         setu_msg_id = []
@@ -132,7 +134,7 @@ class SendSetu:
         try:
             start_time = time.time()  # 记录开始发送的时间
             # 如果是群聊并且env设置了群聊转发, 那么就转发
-            if isinstance(event, GroupMessageEvent) and pm.group_forward_msg:
+            if isinstance(event, Event) and pm.group_forward_msg:
                 msgs = [
                     {
                         "type": "node",
@@ -157,7 +159,8 @@ class SendSetu:
             else:
                 # 非群聊直接发送
                 for msg in message_list:
-                    setu_msg_id.append((await matcher.send(msg))["message_id"])
+                    await MessageFactory(msg).send()
+                    # setu_msg_id.append((await MessageFactory(msg).send())["message_id"])
                     await asyncio.sleep(0.5)
         except Exception as e:
             logger.warning(repr(e))

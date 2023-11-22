@@ -2,12 +2,12 @@ import contextlib
 from re import I
 
 from nonebot import on_command, on_regex
-from nonebot.adapters.onebot.v11 import GROUP, PRIVATE_FRIEND
 from nonebot.permission import SUPERUSER
-
+from nonebot import require
 from .mamager_handle import manager_handle
 from .send_setu import send_setu
 
+require("nonebot_plugin_saa")
 with contextlib.suppress(Exception):
     from nonebot.plugin import PluginMetadata
     __plugin_meta__ = PluginMetadata(
@@ -31,7 +31,6 @@ setu_regex: str = r"^(setu|色图|涩图|想色色|来份色色|来份色图|想
 on_regex(
     setu_regex,
     flags=I,
-    permission=PRIVATE_FRIEND | GROUP,
     priority=20,
     block=True,
     handlers=[send_setu.setu_handle]
